@@ -1,0 +1,59 @@
+name: studify
+
+networks:
+  studify-net:
+    external: true
+
+services:
+  eureka-green:
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/eureka-server:${TAG:-latest}
+    container_name: eureka-green
+    env_file: [ ./.env ]
+    networks: [ studify-net ]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8761"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  gateway-green:
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/api-gateway:${TAG:-latest}
+    container_name: gateway-green
+    env_file: [ ./.env ]
+    depends_on:
+      - eureka-green
+    networks: [ studify-net ]
+    # 포트 바인딩 없음
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  user-green:
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/user-service:${TAG:-latest}
+    container_name: user-green
+    env_file: [ ./.env ]
+    environment:
+      URL: jdbc:mariadb://user-db:3306/studify-user?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    depends_on:
+      - eureka-green
+    networks: [ studify-net ]
+
+  post-green:
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/post-service:${TAG:-latest}
+    container_name: post-green
+    env_file: [ ./.env ]
+    environment:
+      URL: jdbc:mariadb://post-db:3306/studify-post?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    depends_on:
+      - eureka-green
+    networks: [ studify-net ]
+
+  noti-green:
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/notification-service:${TAG:-latest}
+    container_name: noti-green
+    env_file: [ ./.env ]
+    depends_on:
+      - eureka-green
+    networks: [ studify-net ]
