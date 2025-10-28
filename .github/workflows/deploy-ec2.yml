@@ -48,7 +48,7 @@ jobs:
       # .env 주입 (중복 제거 + 단 한 줄 TAG만 기록)
       - name: Inject .env on EC2
         run: |
-          # 1 우선순위: dispatch 입력 TAG → TAG_DEFAULT 시크릿 → "latest"
+          # 1) 우선순위: dispatch 입력 TAG → TAG_DEFAULT 시크릿 → "latest"
           TAG_VAL="${{ github.event.inputs.tag }}"
           if [ -z "$TAG_VAL" ]; then TAG_VAL="${{ secrets.TAG_DEFAULT }}"; fi
           if [ -z "$TAG_VAL" ]; then TAG_VAL="latest"; fi
