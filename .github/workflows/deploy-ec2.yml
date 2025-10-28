@@ -24,7 +24,7 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > key.pem
           chmod 600 key.pem
 
-      # (선택) EC2에 GHCR 로그인 보강 - private 이미지 대비
+      # (선택) EC2에 GHCR 로그인 보강 - private로 돌릴 가능성에 대비
       - name: GHCR login on EC2
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
@@ -45,9 +45,10 @@ jobs:
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             app/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/studify-be/
 
-      # ✅ 수정 포인트: .env 주입 (기존값 보존 + 시크릿 있으면 덮어쓰기 + 최후엔 기본값 생성)
-      - name: Inject .env on EC2 (safe merge)
+      # .env 주입 (중복 제거 + 단 한 줄 TAG만 기록)
+      - name: Inject .env on EC2
         run: |
+          # 1) 우선순위: dispatch 입력 TAG → TAG_DEFAULT 시크릿 → "latest"
           TAG_VAL="${{ github.event.inputs.tag }}"
           if [ -z "$TAG_VAL" ]; then TAG_VAL="${{ secrets.TAG_DEFAULT }}"; fi
           if [ -z "$TAG_VAL" ]; then TAG_VAL="latest"; fi
@@ -56,47 +57,26 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "set -e
-             cd /home/ubuntu/studify-be
-             touch .env
+            cd /home/ubuntu/studify-be
+            touch .env
+            # 기존 키 제거 (특히 TAG 중복방지)
+            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^DOCKERHUB_USERNAME=/d;/^TAG=/d' .env || true
 
-             # 기존 값 읽기 (있으면 보존)
-             CUR_DRIVER=\$(grep -E '^DRIVER=' .env 2>/dev/null | tail -n1 | cut -d= -f2-)
-             CUR_URL=\$(grep -E '^URL=' .env 2>/dev/null | tail -n1 | cut -d= -f2-)
-             CUR_USER=\$(grep -E '^USER=' .env 2>/dev/null | tail -n1 | cut -d= -f2-)
-             CUR_PASSWD=\$(grep -E '^PASSWD=' .env 2>/dev/null | tail -n1 | cut -d= -f2-)
-             CUR_EUREKA=\$(grep -E '^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=' .env 2>/dev/null | tail -n1 | cut -d= -f2-)
+            # 시크릿 주입
+            [ -n '${{ secrets.DRIVER }}' ] && echo 'DRIVER=${{ secrets.DRIVER }}' >> .env || true
+            [ -n '${{ secrets.URL }}' ] && echo 'URL=${{ secrets.URL }}' >> .env || true
+            [ -n '${{ secrets.USER }}' ] && echo 'USER=${{ secrets.USER }}' >> .env || true
+            [ -n '${{ secrets.PASSWD }}' ] && echo 'PASSWD=${{ secrets.PASSWD }}' >> .env || true
+            [ -n '${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' ] && echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env || true
+            [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true
 
-             # 시크릿 우선순위로 신규 값 구성, 비어있으면 기존 값 유지
-             NEW_DRIVER='${{ secrets.DRIVER }}';  [ -z \"\$NEW_DRIVER\" ]  && NEW_DRIVER=\"\$CUR_DRIVER\"
-             NEW_URL='${{ secrets.URL }}';        [ -z \"\$NEW_URL\" ]     && NEW_URL=\"\$CUR_URL\"
-             NEW_USER='${{ secrets.USER }}';      [ -z \"\$NEW_USER\" ]    && NEW_USER=\"\$CUR_USER\"
-             NEW_PASSWD='${{ secrets.PASSWD }}';  [ -z \"\$NEW_PASSWD\" ]  && NEW_PASSWD=\"\$CUR_PASSWD\"
-             NEW_EUREKA='${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}'; [ -z \"\$NEW_EUREKA\" ] && NEW_EUREKA=\"\$CUR_EUREKA\"
+            # TAG 단 한 줄만!
+            echo 'TAG='"$TAG_VAL" >> .env
 
-             # 안전장치: URL이 여전히 비었으면 EC2 프라이빗 IP로 기본값 생성
-             if [ -z \"\$NEW_URL\" ]; then
-               EC2_IP=\$(hostname -I | awk '{print \$1}')
-               NEW_URL=\"jdbc:mariadb://\${EC2_IP}:3306/studify-test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul\"
-             fi
-
-             # 라인엔딩 문제 방지: 완성본으로 통째 갱신
-             {
-               [ -n \"\$NEW_DRIVER\" ] && echo \"DRIVER=\$NEW_DRIVER\"
-               [ -n \"\$NEW_URL\" ] && echo \"URL=\$NEW_URL\"
-               [ -n \"\$NEW_USER\" ] && echo \"USER=\$NEW_USER\"
-               [ -n \"\$NEW_PASSWD\" ] && echo \"PASSWD=\$NEW_PASSWD\"
-               [ -n \"\$NEW_EUREKA\" ] && echo \"EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=\$NEW_EUREKA\"
-               echo 'TAG='\"${TAG_VAL}\"
-             } > .env
-
-             # 라인엔딩을 LF로 정리 (혹시 CRLF로 올라왔을 때 대비)
-             command -v dos2unix >/dev/null 2>&1 || sudo apt-get update && sudo apt-get -y install dos2unix || true
-             dos2unix .env || true
-
-             echo '---- .env (after inject) ----'
-             cat .env
-
-             chmod +x deploy/*.sh"
+            # 확인 출력
+            echo '---- .env ----'
+            cat .env
+            chmod +x deploy/*.sh"
 
       # 배포 실행
       - name: Compose up (remote)
@@ -105,10 +85,10 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "bash /home/ubuntu/studify-be/deploy/start.sh"
 
-      # 헬스 체크 (게이트웨이 올라올 때까지 재시도)
+      # 헬스 체크 (관리 포트 분리 안 했다는 가정; 분리했다면 포트 변경)
       - name: Smoketest (gateway)
         run: |
-          for i in {1..18}; do
+          for i in {1..12}; do
             echo "Checking health... try $i"
             if ssh -i key.pem -o StrictHostKeyChecking=no \
               ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
