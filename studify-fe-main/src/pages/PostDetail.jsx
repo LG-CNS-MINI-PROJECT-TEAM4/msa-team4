@@ -51,8 +51,9 @@ export default function PostDetail() {
 
     try {
       const payload = { content: comment.trim() };
+      // API 경로 수정: /studify prefix 제거
       const { data } = await api.post(
-        `/studify/api/v1/post/${id}/comment/register`,
+        `/api/v1/posts/${id}/comments`,
         payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -61,7 +62,11 @@ export default function PostDetail() {
       setComment("");
     } catch (e) {
       console.error("댓글 등록 실패", e);
-      alert("댓글 등록 실패");
+      if (e?.response?.status === 404 || e?.response?.status === 405) {
+        alert("댓글 기능이 아직 구현되지 않았습니다.");
+      } else {
+        alert("댓글 등록 실패");
+      }
     }
   };
 
@@ -73,12 +78,17 @@ export default function PostDetail() {
       return;
     }
     try {
-      await api.delete(`/studify/api/v1/post/${id}/comment/${commentId}`, {
+      // API 경로 수정: /studify prefix 제거
+      await api.delete(`/api/v1/posts/${id}/comments/${commentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setComments((prev) => prev.filter((c) => c.commentId !== commentId));
     } catch (e) {
-      alert("댓글 삭제 실패 (작성자만 삭제 가능)");
+      if (e?.response?.status === 404 || e?.response?.status === 405) {
+        alert("댓글 기능이 아직 구현되지 않았습니다.");
+      } else {
+        alert("댓글 삭제 실패 (작성자만 삭제 가능)");
+      }
       console.error("댓글 삭제 실패", e);
     }
   };
@@ -94,8 +104,9 @@ export default function PostDetail() {
 
     try {
       setClosing(true);
+      // API 경로 수정: /studify prefix 제거
       const { data } = await api.patch(
-        `/studify/api/v1/post/${id}`,
+        `/api/v1/posts/${id}/close`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -104,9 +115,14 @@ export default function PostDetail() {
         ...(data || {}),
         status: data?.status || "CLOSED",
       }));
+      alert("모집이 마감되었습니다.");
     } catch (e) {
       console.error("마감 처리 실패", e);
-      alert("마감 처리에 실패했습니다.");
+      if (e?.response?.status === 404 || e?.response?.status === 405) {
+        alert("모집 마감 기능이 아직 구현되지 않았습니다.");
+      } else {
+        alert("마감 처리에 실패했습니다.");
+      }
     } finally {
       setClosing(false);
     }
@@ -120,15 +136,19 @@ export default function PostDetail() {
       return;
     }
     try {
-      // 실제 신청 API 호출
-      await api.post(`/studify/api/v1/applications/post/${id}`, {}, {
+      // 실제 신청 API 호출 - API 경로 수정: /studify prefix 제거
+      await api.post(`/api/v1/applications/posts/${id}`, {}, {
         headers: { Authorization: `Bearer ${token}` },
         withCredentials: true
       });
       alert("신청이 완료되었습니다.");
     } catch (e) {
       console.error("신청 실패", e);
-      alert("신청에 실패했습니다.");
+      if (e?.response?.status === 404 || e?.response?.status === 405) {
+        alert("신청 기능이 아직 구현되지 않았습니다.");
+      } else {
+        alert("신청에 실패했습니다.");
+      }
     }
   };
 
