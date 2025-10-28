@@ -47,21 +47,22 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.matrix-builder.outputs.matrix) }}
+    env:
+      # 🔴 여기서 한 번만 소문자로 ‘강제’해서 모든 태그에 사용
+      REPO_LC: ${{ toLower(github.repository) }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
-      # GHCR 로그인
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # GHCR_TOKEN이 없으면 기본 GITHUB_TOKEN 사용
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # (옵션) Docker Hub 로그인 — secrets는 env로 받아서 조건 체크
+      # (옵션) Docker Hub 로그인 — env로 조건 체크
       - name: Login to Docker Hub
         env:
           DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -72,7 +73,12 @@ jobs:
           username: ${{ env.DH_USER }}
           password: ${{ env.DH_TOKEN }}
 
-      # 이미지 빌드 & GHCR 푸시
+      # 디버그: 실제로 어떤 태그를 쓰는지 출력
+      - name: Debug Tags
+        run: |
+          echo "TAG1=ghcr.io/${REPO_LC}/${{ matrix.service }}:${{ github.sha }}"
+          echo "TAG2=ghcr.io/${REPO_LC}/${{ matrix.service }}:latest"
+
       - name: Build & Push to GHCR
         uses: docker/build-push-action@v6
         with:
@@ -81,7 +87,7 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+            ghcr.io/${{ env.REPO_LC }}/${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
