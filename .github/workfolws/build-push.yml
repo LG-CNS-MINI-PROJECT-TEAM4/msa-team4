@@ -1,4 +1,4 @@
-name: Build & Push Images
+name: Build and Push to GHCR
 
 on:
   push:
