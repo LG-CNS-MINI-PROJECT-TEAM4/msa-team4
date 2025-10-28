@@ -14,7 +14,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +22,6 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > key.pem
           chmod 600 key.pem
 
-      # 이전 TAG 조회 (롤백 대비) - 경로 고정
       - name: Read previous TAG on EC2
         id: prev
         run: |
@@ -31,29 +29,25 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "grep -E '^TAG=' /home/ubuntu/studify-be/.env | cut -d= -f2 || echo latest")" >> $GITHUB_OUTPUT
 
-      # 레포의 app/ → EC2 ~/studify-be/ 로 동기화
       - name: Rsync app bundle
         run: |
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             app/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/studify-be/
 
-      # .env 주입 (네가 등록한 키들과 동일 이름으로 반영)
       - name: Inject .env on EC2
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "cd /home/ubuntu/studify-be && \
             touch .env && \
-            # 기존 키 제거
             sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^TAG=/d;/^DOCKERHUB_USERNAME=/d' .env || true; \
-            # 시크릿 → .env 주입
             [ -n '${{ secrets.DRIVER }}' ] && echo 'DRIVER=${{ secrets.DRIVER }}' >> .env || true; \
             echo 'URL=${{ secrets.URL }}' >> .env; \
             echo 'USER=${{ secrets.USER }}' >> .env; \
             echo 'PASSWD=${{ secrets.PASSWD }}' >> .env; \
             echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env; \
             [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true; \
-            echo "TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || "latest" }}" >> .env; \
+            echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || 'latest' }}' >> .env; \
             chmod +x deploy/*.sh"
 
       - name: Compose up (remote)
@@ -77,3 +71,4 @@ jobs:
             "cd /home/ubuntu/studify-be && \
             sed -i 's/^TAG=.*/TAG=${{ steps.prev.outputs.prev }}/' .env && \
             bash /home/ubuntu/studify-be/deploy/start.sh"
+
