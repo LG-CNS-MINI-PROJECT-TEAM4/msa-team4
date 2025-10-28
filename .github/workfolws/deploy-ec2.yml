@@ -14,6 +14,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,58 +23,57 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > key.pem
           chmod 600 key.pem
 
-      # (A) 이전 TAG 백업 (롤백용)
+      # 이전 TAG 조회 (롤백 대비) - 경로 고정
       - name: Read previous TAG on EC2
         id: prev
         run: |
           echo "prev=$(ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "grep -E '^TAG=' /home/ubuntu/app/.env | cut -d= -f2 || echo latest")" >> $GITHUB_OUTPUT
+            "grep -E '^TAG=' /home/ubuntu/studify-be/.env | cut -d= -f2 || echo latest")" >> $GITHUB_OUTPUT
 
-      # (B) app 번들 동기화
+      # 레포의 app/ → EC2 ~/studify-be/ 로 동기화
       - name: Rsync app bundle
         run: |
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
-            app/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/app/
+            app/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/studify-be/
 
-      # (C) .env 값 주입 (고정된 GHCR 네임스페이스 사용)
+      # .env 주입 (네가 등록한 키들과 동일 이름으로 반영)
       - name: Inject .env on EC2
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "cd /home/ubuntu/app && \
+            "cd /home/ubuntu/studify-be && \
             touch .env && \
-            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^JWT_SECRET=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^TAG=/d' .env || true; \
-            echo 'DRIVER=${{ secrets.DRIVER }}' >> .env; \
+            # 기존 키 제거
+            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^TAG=/d;/^DOCKERHUB_USERNAME=/d' .env || true; \
+            # 시크릿 → .env 주입
+            [ -n '${{ secrets.DRIVER }}' ] && echo 'DRIVER=${{ secrets.DRIVER }}' >> .env || true; \
             echo 'URL=${{ secrets.URL }}' >> .env; \
             echo 'USER=${{ secrets.USER }}' >> .env; \
             echo 'PASSWD=${{ secrets.PASSWD }}' >> .env; \
-            [ -n '${{ secrets.JWT_SECRET }}' ] && echo 'JWT_SECRET=${{ secrets.JWT_SECRET }}' >> .env || true; \
-            [ -n '${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' ] && echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env || true; \
-            echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || 'latest' }}' >> .env; \
+            echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env; \
+            [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true; \
+            echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || "latest" }}' >> .env; \
             chmod +x deploy/*.sh"
 
-      # (D) 배포 실행
       - name: Compose up (remote)
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "bash /home/ubuntu/app/deploy/start.sh"
+            "bash /home/ubuntu/studify-be/deploy/start.sh"
 
-      # (E) 스모크 테스트
-      - name: Smoketest (gateway health)
+      - name: Smoketest (gateway)
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"
 
-      # (F) 실패 시 자동 롤백
       - name: Rollback on failure
         if: failure()
         run: |
           echo "Rolling back to TAG=${{ steps.prev.outputs.prev }}"
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "cd /home/ubuntu/app && \
+            "cd /home/ubuntu/studify-be && \
             sed -i 's/^TAG=.*/TAG=${{ steps.prev.outputs.prev }}/' .env && \
-            bash /home/ubuntu/app/deploy/start.sh"
+            bash /home/ubuntu/studify-be/deploy/start.sh"

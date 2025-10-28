@@ -15,15 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: set
+        shell: bash
         run: |
           set -e
           git fetch --depth=2 origin $GITHUB_REF || true
           changed() { git diff --name-only HEAD~1 HEAD -- "$1" >/dev/null 2>&1; }
           SERVICES=()
           changed studify-msa/eureka-server && SERVICES+=("eureka-server")
-          changed studify-msa/api-gateway && SERVICES+=("api-gateway")
-          changed studify-msa/user-service && SERVICES+=("user-service")
-          changed studify-msa/post-service && SERVICES+=("post-service")
+          changed studify-msa/api-gateway   && SERVICES+=("api-gateway")
+          changed studify-msa/user-service  && SERVICES+=("user-service")
+          changed studify-msa/post-service  && SERVICES+=("post-service")
           changed studify-msa/notification-service && SERVICES+=("notification-service")
           if [ ${#SERVICES[@]} -eq 0 ]; then echo 'matrix={"service":[]}' >> $GITHUB_OUTPUT; exit 0; fi
           printf 'matrix={"service":[' >> $GITHUB_OUTPUT
@@ -39,18 +40,28 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
+      # ---- GHCR 로그인 (기본) ----
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          # 푸시 권한은 실행자(actor) 또는 토큰에 따라 달라지므로 actor 사용 권장
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push
+      # ---- Docker Hub 로그인 (선택: 시크릿이 있을 때만) ----
+      - name: Login to Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ---- GHCR 푸시 ----
+      - name: Build & Push to GHCR
         uses: docker/build-push-action@v6
         with:
           context: studify-msa/${{ matrix.service }}
@@ -62,3 +73,4 @@ jobs:
             ghcr.io/lg-cns-mini-project-team4/msa-team4/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
