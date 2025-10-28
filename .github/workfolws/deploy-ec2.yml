@@ -22,7 +22,7 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > key.pem
           chmod 600 key.pem
 
-      # (A) 이전 TAG 백업(롤백용)
+      # (A) 이전 TAG 백업 (롤백용)
       - name: Read previous TAG on EC2
         id: prev
         run: |
@@ -36,22 +36,20 @@ jobs:
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             app/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/app/
 
-      # (C) .env 값 주입 (REGISTRY_OWNER/REPO 포함)
+      # (C) .env 값 주입 (고정된 GHCR 네임스페이스 사용)
       - name: Inject .env on EC2
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "cd /home/ubuntu/app && \
             touch .env && \
-            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^JWT_SECRET=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^REGISTRY_OWNER=/d;/^REGISTRY_REPO=/d;/^TAG=/d' .env || true; \
+            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^JWT_SECRET=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^TAG=/d' .env || true; \
             echo 'DRIVER=${{ secrets.DRIVER }}' >> .env; \
             echo 'URL=${{ secrets.URL }}' >> .env; \
             echo 'USER=${{ secrets.USER }}' >> .env; \
             echo 'PASSWD=${{ secrets.PASSWD }}' >> .env; \
             [ -n '${{ secrets.JWT_SECRET }}' ] && echo 'JWT_SECRET=${{ secrets.JWT_SECRET }}' >> .env || true; \
             [ -n '${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' ] && echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env || true; \
-            echo 'REGISTRY_OWNER=${{ github.repository_owner }}' >> .env; \
-            echo 'REGISTRY_REPO=${{ github.event.repository.name }}' >> .env; \
             echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || 'latest' }}' >> .env; \
             chmod +x deploy/*.sh"
 
