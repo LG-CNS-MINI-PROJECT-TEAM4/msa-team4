@@ -15,7 +15,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +46,6 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "cd /home/ubuntu/studify-be && \
             touch .env && \
-            # 기존 키 제거
             sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^TAG=/d;/^DOCKERHUB_USERNAME=/d' .env || true; \
             # 시크릿 반영
             [ -n '${{ secrets.DRIVER }}' ] && echo 'DRIVER=${{ secrets.DRIVER }}' >> .env || true; \
@@ -58,6 +56,7 @@ jobs:
             [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true; \
             # TAG 최종 주입
             echo 'TAG='\"$TAG_VALUE\" >> .env; \
+            echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || 'latest' }}' >> .env; \
             chmod +x deploy/*.sh"
 
       - name: Compose up (remote)
@@ -71,3 +70,14 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Rolling back to TAG=${{ steps.prev.outputs.prev }}"
+          ssh -i key.pem -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "cd /home/ubuntu/studify-be && \
+            sed -i 's/^TAG=.*/TAG=${{ steps.prev.outputs.prev }}/' .env && \
+            bash /home/ubuntu/studify-be/deploy/start.sh"
+
