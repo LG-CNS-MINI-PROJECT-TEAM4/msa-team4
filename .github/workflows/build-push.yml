@@ -2,10 +2,14 @@ name: Build and Push to GHCR
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
     paths:
       - "studify-msa/**"
       - ".github/workflows/build-push.yml"
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   matrix-builder:
@@ -20,13 +24,19 @@ jobs:
           set -e
           git fetch --depth=2 origin $GITHUB_REF || true
           changed() { git diff --name-only HEAD~1 HEAD -- "$1" >/dev/null 2>&1; }
+
           SERVICES=()
-          changed studify-msa/eureka-server && SERVICES+=("eureka-server")
-          changed studify-msa/api-gateway   && SERVICES+=("api-gateway")
-          changed studify-msa/user-service  && SERVICES+=("user-service")
-          changed studify-msa/post-service  && SERVICES+=("post-service")
-          changed studify-msa/notification-service && SERVICES+=("notification-service")
-          if [ ${#SERVICES[@]} -eq 0 ]; then echo 'matrix={"service":[]}' >> $GITHUB_OUTPUT; exit 0; fi
+          changed studify-msa/eureka-server            && SERVICES+=("eureka-server")
+          changed studify-msa/api-gateway              && SERVICES+=("api-gateway")
+          changed studify-msa/user-service             && SERVICES+=("user-service")
+          changed studify-msa/post-service             && SERVICES+=("post-service")
+          changed studify-msa/notification-service     && SERVICES+=("notification-service")
+
+          if [ ${#SERVICES[@]} -eq 0 ]; then
+            echo 'matrix={"service":[]}' >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           printf 'matrix={"service":[' >> $GITHUB_OUTPUT
           printf '"%s",' "${SERVICES[@]}" | sed 's/,$//' >> $GITHUB_OUTPUT
           printf ']}\n' >> $GITHUB_OUTPUT
@@ -44,15 +54,15 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
-      # ---- GHCR 로그인 (기본) ----
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
+          # GHCR_TOKEN이 없으면 기본 GITHUB_TOKEN 사용
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # ---- Docker Hub 로그인 (선택: 시크릿이 있을 때만) ----
+      # (옵션) Docker Hub도 사용한다면
       - name: Login to Docker Hub
         if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
         uses: docker/login-action@v3
@@ -60,7 +70,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # ---- GHCR 푸시 ----
       - name: Build & Push to GHCR
         uses: docker/build-push-action@v6
         with:
@@ -69,8 +78,7 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/lg-cns-mini-project-team4/msa-team4/${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/lg-cns-mini-project-team4/msa-team4/${{ matrix.service }}:latest
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
