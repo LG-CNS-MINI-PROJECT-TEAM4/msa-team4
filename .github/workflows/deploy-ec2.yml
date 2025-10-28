@@ -88,9 +88,18 @@ jobs:
       # 헬스 체크 (관리 포트 분리 안 했다는 가정; 분리했다면 포트 변경)
       - name: Smoketest (gateway)
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"
+          for i in {1..12}; do
+            echo "Checking health... try $i"
+            if ssh -i key.pem -o StrictHostKeyChecking=no \
+              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+              "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"; then
+              echo "Gateway is UP!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Gateway failed to respond in time"
+          exit 1
 
       # 실패 시 롤백
       - name: Rollback on failure
