@@ -1,32 +1,32 @@
 name: studify
 services:
   eureka-server:
-    image: ghcr.io/${REGISTRY_OWNER}/${REGISTRY_REPO}/eureka-server:${TAG:-latest}
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/eureka-server:${TAG:-latest}
     env_file: [ ./.env ]
     ports: ["8761:8761"]
     networks: [ studify-net ]
 
   api-gateway:
-    image: ghcr.io/${REGISTRY_OWNER}/${REGISTRY_REPO}/api-gateway:${TAG:-latest}
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/api-gateway:${TAG:-latest}
     env_file: [ ./.env ]
     ports: ["8080:8080"]
     depends_on: [ eureka-server ]
     networks: [ studify-net ]
 
   user-service:
-    image: ghcr.io/${REGISTRY_OWNER}/${REGISTRY_REPO}/user-service:${TAG:-latest}
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/user-service:${TAG:-latest}
     env_file: [ ./.env ]
     depends_on: [ eureka-server ]
     networks: [ studify-net ]
 
   post-service:
-    image: ghcr.io/${REGISTRY_OWNER}/${REGISTRY_REPO}/post-service:${TAG:-latest}
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/post-service:${TAG:-latest}
     env_file: [ ./.env ]
     depends_on: [ eureka-server ]
     networks: [ studify-net ]
 
   notification-service:
-    image: ghcr.io/${REGISTRY_OWNER}/${REGISTRY_REPO}/notification-service:${TAG:-latest}
+    image: ghcr.io/lg-cns-mini-project-team4/msa-team4/notification-service:${TAG:-latest}
     env_file: [ ./.env ]
     depends_on: [ eureka-server ]
     networks: [ studify-net ]
