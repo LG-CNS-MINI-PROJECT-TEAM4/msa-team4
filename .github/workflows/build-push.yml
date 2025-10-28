@@ -64,7 +64,10 @@ jobs:
       # (옵션) Docker Hub도 사용한다면
       - name: Login to Docker Hub
         if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
-          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || github.token }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # Docker Hub 로그인(선택) — secrets는 if에서 직접 못 쓰므로 env로 받아서 체크
       - name: Login to Docker Hub (optional)
