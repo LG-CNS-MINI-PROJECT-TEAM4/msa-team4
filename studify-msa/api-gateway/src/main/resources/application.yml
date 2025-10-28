@@ -64,6 +64,15 @@ eureka:
 jwt:
   secret: "change-me-please-very-long-secret-key-for-dev"
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info          # ✅ 헬스 노출
+  endpoint:
+    health:
+      show-details: never             # 필요 시 always
+
 logging:
   level:
     org.springframework.cloud.gateway: DEBUG
