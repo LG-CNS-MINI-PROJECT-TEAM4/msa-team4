@@ -1,11 +1,16 @@
-# Java 17이 설치된 리눅스
-FROM openjdk:17-jdk-slim
+# -----------------------------
+# 1단계: Build Stage (Gradle 빌드)
+# -----------------------------
+FROM gradle:8.4-jdk17 AS builder
+WORKDIR /app
+COPY . .
+RUN gradle clean build -x test --no-daemon
 
-# 빌드된 .jar 파일이 있는 경로
-ARG JAR_FILE=build/libs/*.jar
+# -----------------------------
+# 2단계: Run Stage (경량 실행 이미지)
+# -----------------------------
+FROM eclipse-temurin:17-jdk
+WORKDIR /app
+COPY --from=builder /app/build/libs/*.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]
 
-# .jar 파일을 컨테이너 안으로 app.jar 로 복사
-COPY ${JAR_FILE} app.jar
-
-# 컨테이너가 시작 시 명령어
-ENTRYPOINT ["java","-jar","/app.jar"]
