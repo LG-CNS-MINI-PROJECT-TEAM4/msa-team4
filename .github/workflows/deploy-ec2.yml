@@ -25,11 +25,11 @@ jobs:
           chmod 600 key.pem
 
       # (선택) EC2에 GHCR 로그인 보강 - private로 돌릴 가능성에 대비
-      # - name: GHCR login on EC2
-      #   run: |
-      #     ssh -i key.pem -o StrictHostKeyChecking=no \
-      #       ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-      #       "echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin || true"
+      - name: GHCR login on EC2
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin || true"
 
       # 이전 TAG 로깅용 (없으면 latest)
       - name: Read previous TAG on EC2
