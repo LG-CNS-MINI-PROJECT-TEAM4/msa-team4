@@ -8,13 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Image TAG (default: latest)'
+        description: "Image TAG (default: latest)"
         required: false
-        default: 'latest'   # 작은따옴표 사용
+        default: "latest"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,54 +24,75 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > key.pem
           chmod 600 key.pem
 
-      # 현재 EC2에 기록된 TAG 읽기(로그용)
+      # (선택) EC2에 GHCR 로그인 보강 - private로 돌릴 가능성에 대비
+      # - name: GHCR login on EC2
+      #   run: |
+      #     ssh -i key.pem -o StrictHostKeyChecking=no \
+      #       ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+      #       "echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USER }}' --password-stdin || true"
+
+      # 이전 TAG 로깅용 (없으면 latest)
       - name: Read previous TAG on EC2
         id: prev
         run: |
           echo "prev=$(ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "grep -E '^TAG=' /home/ubuntu/studify-be/.env | cut -d= -f2 || echo latest")" >> $GITHUB_OUTPUT
+            "grep -E '^TAG=' /home/ubuntu/studify-be/.env 2>/dev/null | tail -n1 | cut -d= -f2 || echo latest")" >> $GITHUB_OUTPUT
 
-      # 레포의 app/ 폴더를 EC2 ~/studify-be/ 로 동기화
+      # 레포의 app/ → EC2 ~/studify-be/ 동기화
       - name: Rsync app bundle
         run: |
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
             app/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/studify-be/
 
-      # .env 주입 (시크릿 + TAG)
+      # .env 주입 (중복 제거 + 단 한 줄 TAG만 기록)
       - name: Inject .env on EC2
-        env:
-          TAG_VALUE: ${{ github.event.inputs.tag || secrets.TAG_DEFAULT || 'latest' }}
         run: |
+          # 1 우선순위: dispatch 입력 TAG → TAG_DEFAULT 시크릿 → "latest"
+          TAG_VAL="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG_VAL" ]; then TAG_VAL="${{ secrets.TAG_DEFAULT }}"; fi
+          if [ -z "$TAG_VAL" ]; then TAG_VAL="latest"; fi
+          echo "Using TAG=$TAG_VAL"
+
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "cd /home/ubuntu/studify-be && \
-            touch .env && \
-            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^TAG=/d;/^DOCKERHUB_USERNAME=/d' .env || true; \
-            # 시크릿 반영
-            [ -n '${{ secrets.DRIVER }}' ] && echo 'DRIVER=${{ secrets.DRIVER }}' >> .env || true; \
-            echo 'URL=${{ secrets.URL }}' >> .env; \
-            echo 'USER=${{ secrets.USER }}' >> .env; \
-            echo 'PASSWD=${{ secrets.PASSWD }}' >> .env; \
-            echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env; \
-            [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true; \
-            # TAG 최종 주입
-            echo 'TAG='\"$TAG_VALUE\" >> .env; \
-            echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || 'latest' }}' >> .env; \
+            "set -e
+            cd /home/ubuntu/studify-be
+            touch .env
+            # 기존 키 제거 (특히 TAG 중복방지)
+            sed -i '/^DRIVER=/d;/^URL=/d;/^USER=/d;/^PASSWD=/d;/^EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=/d;/^DOCKERHUB_USERNAME=/d;/^TAG=/d' .env || true
+
+            # 시크릿 주입
+            [ -n '${{ secrets.DRIVER }}' ] && echo 'DRIVER=${{ secrets.DRIVER }}' >> .env || true
+            [ -n '${{ secrets.URL }}' ] && echo 'URL=${{ secrets.URL }}' >> .env || true
+            [ -n '${{ secrets.USER }}' ] && echo 'USER=${{ secrets.USER }}' >> .env || true
+            [ -n '${{ secrets.PASSWD }}' ] && echo 'PASSWD=${{ secrets.PASSWD }}' >> .env || true
+            [ -n '${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' ] && echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env || true
+            [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true
+
+            # TAG 단 한 줄만!
+            echo 'TAG='"$TAG_VAL" >> .env
+
+            # 확인 출력
+            echo '---- .env ----'
+            cat .env
             chmod +x deploy/*.sh"
 
+      # 배포 실행
       - name: Compose up (remote)
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "bash /home/ubuntu/studify-be/deploy/start.sh"
 
+      # 헬스 체크 (관리 포트 분리 안 했다는 가정; 분리했다면 포트 변경)
       - name: Smoketest (gateway)
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"
 
+      # 실패 시 롤백
       - name: Rollback on failure
         if: failure()
         run: |
@@ -78,6 +100,5 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "cd /home/ubuntu/studify-be && \
-            sed -i 's/^TAG=.*/TAG=${{ steps.prev.outputs.prev }}/' .env && \
+            sed -i '/^TAG=/d' .env && echo 'TAG=${{ steps.prev.outputs.prev }}' >> .env && \
             bash /home/ubuntu/studify-be/deploy/start.sh"
-
