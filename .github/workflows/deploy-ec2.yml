@@ -53,7 +53,7 @@ jobs:
             echo 'PASSWD=${{ secrets.PASSWD }}' >> .env; \
             echo 'EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=${{ secrets.EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE }}' >> .env; \
             [ -n '${{ secrets.DOCKERHUB_USERNAME }}' ] && echo 'DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}' >> .env || true; \
-            echo 'TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || "latest" }}' >> .env; \
+            echo "TAG=${{ github.event.inputs.tag || secrets.TAG_DEFAULT || "latest" }}" >> .env; \
             chmod +x deploy/*.sh"
 
       - name: Compose up (remote)
