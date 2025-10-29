@@ -96,7 +96,7 @@ jobs:
               echo "Gateway (via proxy) is UP!"
               exit 0
             fi
-            sleep 5
+          sleep 5
           done
           echo "Gateway (via proxy) failed to respond in time"
           echo "--- gateway logs (last 200 lines) ---"
