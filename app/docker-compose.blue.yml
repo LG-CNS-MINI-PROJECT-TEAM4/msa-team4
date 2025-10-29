@@ -5,6 +5,7 @@ networks:
     external: true
     name: studify-net
 
+
 services:
   eureka-blue:
     image: ghcr.io/lg-cns-mini-project-team4/msa-team4/eureka-server:${TAG:-latest}
