@@ -2,6 +2,7 @@ name: studify
 
 networks:
   studify-net:
+    name: studify-net
     driver: bridge
 
 services:

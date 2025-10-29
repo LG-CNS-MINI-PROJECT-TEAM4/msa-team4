@@ -3,6 +3,14 @@ set -euo pipefail
 
 cd /home/ubuntu/studify-be
 
+echo "🕸 네트워크 확인/생성 중..."
+if ! sudo docker network inspect studify-net >/dev/null 2>&1; then
+  sudo docker network create --driver bridge studify-net
+  echo "✅ studify-net 생성 완료"
+else
+  echo "✅ studify-net 이미 존재"
+fi
+
 echo "🧹 기존 컨테이너 정리 중..."
 sudo docker compose -f docker-compose.yml down || true
 sudo docker compose -f docker-compose.blue.yml down || true
