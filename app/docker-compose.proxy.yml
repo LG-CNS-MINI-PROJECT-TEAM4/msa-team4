@@ -2,7 +2,6 @@ name: studify
 
 networks:
   studify-net:
-    name: studify-net
     external: true
 
 services:
