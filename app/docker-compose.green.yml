@@ -3,7 +3,6 @@ name: studify
 networks:
   studify-net:
     external: true
-    name: studify-net
 
 services:
   eureka-green:

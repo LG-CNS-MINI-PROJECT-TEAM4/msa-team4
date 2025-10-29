@@ -2,8 +2,6 @@ name: studify
 
 networks:
   studify-net:
-    driver: bridge
-    name: studify-net
     external: true
 
 services:
