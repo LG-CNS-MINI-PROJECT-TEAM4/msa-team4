@@ -86,19 +86,25 @@ jobs:
             "bash /home/ubuntu/studify-be/deploy/start.sh"
 
       # 헬스 체크 (관리 포트 분리 안 했다는 가정; 분리했다면 포트 변경)
-      - name: Smoketest (gateway)
+      - name: Smoketest (via Nginx 80)
         run: |
-          for i in {1..12}; do
-            echo "Checking health... try $i"
+          for i in {1..24}; do
+            echo "Checking health through Nginx... try $i"
             if ssh -i key.pem -o StrictHostKeyChecking=no \
               ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-              "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"; then
-              echo "Gateway is UP!"
+              "curl -fsS http://localhost/actuator/health | grep -q '\"status\":\"UP\"'"; then
+              echo "Gateway (via proxy) is UP!"
               exit 0
             fi
             sleep 5
           done
-          echo "Gateway failed to respond in time"
+          echo "Gateway (via proxy) failed to respond in time"
+          echo "--- gateway logs (last 200 lines) ---"
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "sudo docker logs --tail=200 gateway-blue || true; sudo docker logs --tail=200 gateway-green || true"
+          echo "--- docker compose ps (remote) ---"
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "cd /home/ubuntu/studify-be && sudo docker compose ps && sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
           exit 1
 
       # 실패 시 롤백
