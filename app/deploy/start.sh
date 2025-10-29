@@ -11,6 +11,14 @@ else
   echo "✅ studify-net 이미 존재"
 fi
 
+echo "🛑 포트 80 점유 해제..."
+CID=$(sudo docker ps --filter "publish=80" -q || true)
+if [ -n "${CID}" ]; then
+  sudo docker stop ${CID} || true
+fi
+sudo systemctl stop nginx 2>/dev/null || true
+sudo systemctl stop apache2 2>/dev/null || sudo systemctl stop httpd 2>/dev/null || true
+
 echo "🧹 기존 컨테이너 정리 중..."
 sudo docker compose -f docker-compose.yml down || true
 sudo docker compose -f docker-compose.blue.yml down || true
